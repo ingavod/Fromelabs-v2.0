@@ -1,0 +1,157 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  BETA
+  MODERATOR
+  ADMIN
+  SUPER
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  passwordHash  String
+  emailVerified Boolean   @default(false)
+  
+  role          UserRole  @default(USER)
+  isAdmin       Boolean   @default(false)
+  isActive      Boolean   @default(true)
+  isBlocked     Boolean   @default(false)
+  blockedUntil  DateTime?
+  
+  plan                 String  @default("FREE")
+  stripeCustomerId     String? @unique
+  stripeSubscriptionId String? @unique
+  subscriptionStatus   String  @default("INACTIVE")
+  
+  // Billing information
+  phone          String?
+  identification String? // DNI, NIE, CIF, Tax ID, SSN, etc.
+  address        String?
+  city           String?
+  postalCode     String?
+  country        String?
+  
+  messagesUsed  Int      @default(0)
+  messagesLimit Int      @default(50)
+  tokensUsed    Int      @default(0)
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  lastLoginAt DateTime?
+  
+  conversations Conversation[]
+  projects      Project[]        // NUEVA RELACIÓN
+  sessions      Session[]        // NUEVA RELACIÓN PARA COOKIES
+  usage         Usage[]
+  loginAttempts LoginAttempt[]
+}
+
+model VerificationToken {
+  id         String   @id @default(cuid())
+  email      String
+  token      String   @unique
+  expires    DateTime
+  createdAt  DateTime @default(now())
+
+  @@unique([email, token])
+  @@map("verification_tokens")
+}
+
+model PasswordResetToken {
+  id         String   @id @default(cuid())
+  email      String
+  token      String   @unique
+  expires    DateTime
+  createdAt  DateTime @default(now())
+
+  @@unique([email, token])
+  @@map("password_reset_tokens")
+}
+
+// NUEVO MODELO PARA SESIONES
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expires      DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// NUEVO MODELO
+model Project {
+  id            String         @id @default(cuid())
+  name          String
+  userId        String
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversations Conversation[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([userId])
+}
+
+model Conversation {
+  id        String    @id @default(cuid())
+  title     String    @default("Nueva conversación")
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId String?   // NUEVO CAMPO
+  project   Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull) // NUEVA RELACIÓN
+  messages  Message[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  
+  @@index([userId])
+  @@index([projectId]) // NUEVO ÍNDICE
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String
+  content        String
+  tokensUsed     Int          @default(0)
+  model          String?
+  createdAt      DateTime     @default(now())
+}
+
+model Usage {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messagesCount Int      @default(1)
+  tokensUsed    Int
+  cost          Float
+  model         String
+  timestamp     DateTime @default(now())
+}
+
+model LoginAttempt {
+  id           String    @id @default(cuid())
+  userId       String?
+  user         User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email        String
+  success      Boolean   @default(false)
+  ipAddress    String?
+  failCount    Int       @default(0)
+  blockedUntil DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  
+  @@index([email])
+}
